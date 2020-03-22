@@ -1,0 +1,107 @@
+---
+title: "Visualizing Wisconsin COVID-19 Cases"
+author: "Sean Kent"
+date: "3/22/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE
+)
+
+library(tidyverse)
+library(sf)
+library(maps)
+library(plotly)
+library(here)
+```
+
+## Data
+
+The data comes from [Corona Data Scraper](https://coronadatascraper.com/#home) which has a ton of great data for various regions.  In particular, they have information at the county level in Wisconsin.  I'm using the CSV (tidy format) that can be downloaded via this link: https://coronadatascraper.com/timeseries-tidy.csv.  
+
+
+```{r}
+# timeseries <- read.csv("data/timeseries-tidy.csv")
+timeseries <- read.csv("../data/timeseries-tidy.csv")
+
+wi_timeseries <- 
+  timeseries %>% 
+  filter(state == "WI") %>% 
+  as_tibble() %>% 
+  pivot_wider(names_from = "type", 
+              values_from = "value")
+
+# adjust county name to match 
+wi_timeseries <- 
+  wi_timeseries %>% 
+  mutate(county2 = county %>% 
+           str_remove(" County") %>% 
+           str_remove_all("\\.") %>% 
+           str_to_lower()
+  )
+```
+
+
+```{r}
+## Need to get the county level data
+# counties <- st_as_sf(map("county", plot = FALSE, fill = TRUE))
+
+wi_county <- 
+  maps::map("county", plot = FALSE, fill = TRUE) %>% 
+  st_as_sf() %>% 
+  subset(grepl("wisconsin", .$ID)) %>% 
+  mutate(county = str_replace(ID, "wisconsin,", ""))
+```
+
+## Visualization
+
+Choosing to plot the data from 2020-03-21.  Can make this data choice interactive.  
+
+```{r}
+date_to_plot <- "2020-03-21"
+
+plot_data <- 
+  wi_county %>% 
+  left_join(filter(wi_timeseries, date == date_to_plot),
+            by = c("county" = "county2"))
+```
+
+
+Number of cases by county.  Looking to have options for Cases, deaths, number of new cases, growth rate, etc...
+
+```{r}
+p <- 
+  ggplot(data = plot_data,
+         aes(label = county.y,
+             text = paste(
+               "</br>", county.y,
+               "</br>Cases: ", cases
+             ))) +
+  geom_sf(aes(fill = cases)) +
+  geom_point(aes(long, lat), size = 5, alpha = 0) +
+  scale_fill_distiller(trans = "log",
+                       palette = "YlOrRd",
+                       na.value = "#F2F2F2",
+                       direction = 1,
+                       breaks = 10^(0:3)
+  ) + 
+  theme_void()
+
+# p +
+#   geom_point(aes(long, lat), size = 3, color = rgb(0,0,0,0))
+#   theme_minimal()
+
+
+ggplotly(p, tooltip = c("text"))
+
+```
+
+
+## Appendix: R Code
+
+```{r appendix, ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE}
+```
