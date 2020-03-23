@@ -26,7 +26,7 @@ The data comes from [Corona Data Scraper](https://coronadatascraper.com/#home) w
 
 ```{r}
 # timeseries <- read.csv("data/timeseries-tidy.csv")
-timeseries <- read.csv("../data/timeseries-tidy.csv")
+system.time(timeseries <- read.csv("../data/timeseries-tidy.csv"))
 
 wi_timeseries <- 
   timeseries %>% 
@@ -82,6 +82,7 @@ p <-
                "</br>Cases: ", cases
              ))) +
   geom_sf(aes(fill = cases)) +
+  geom_sf(aes(fill = cases), size = 1.2, data = . %>% filter(county.y == "Dane County")) +
   geom_point(aes(long, lat), size = 5, alpha = 0) +
   scale_fill_distiller(trans = "log",
                        palette = "YlOrRd",

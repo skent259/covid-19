@@ -2,5 +2,8 @@
 covid.Rproj
 
 data-vis/inspiration/
+pandemic/
+_hide/
+
 
 scrape-1point3acres.R
