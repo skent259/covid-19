@@ -87,7 +87,6 @@ ui <- fluidPage(
                    "Select counties to display:",
                    unique(wi_timeseries$county),
                    multiple = TRUE,
-                   # options = list(maxItems = 10),
                    selected = c("Milwaukee County", "Dane County", "Waukesha County")
                ),
                checkboxInput("logscale", "Show Cases on a log scale", FALSE),
@@ -97,12 +96,19 @@ ui <- fluidPage(
                plotlyOutput("WI_map")
         ),
         column(width = 4,
+               align="center",
                # h3("Add cases over time chart")
                plotOutput("WI_cases_plot",
                           height = "300px"),
                br(),
                plotOutput("WI_cases_plot_county",
                           height = "300px"),
+               selectInput(
+                   "WI_cases_plot_county_xaxis",
+                   label = NULL,
+                   c("Date", "Days Since 10 Cases"),
+                   width = "200px"
+               ),
                br()
         )
     )
@@ -191,33 +197,56 @@ server <- function(input, output) {
         # counties_to_plot <- c("Dane County", "Milwaukee County", "Waukesha County")
         counties_to_plot <- input$counties_to_plot
         
-        p <- 
-            wi_timeseries %>%
-            filter(county %in% counties_to_plot) %>%
-            ggplot(aes(date, cases)) +
-            geom_line(aes(color = county), size = 1.5) +
-            scale_x_date(limits = c(Sys.Date() - 14, NA), expand = c(0.06,0,0.06,2),
-                         date_breaks = "2 days", date_labels = "%b %d") +
-            labs(
-                title = "County Level Wisconsin Cases of COVID-19 (last 2 weeks)",
-                y = "Cases",
-                x = NULL
-            ) +
-            theme_minimal() +
-            theme(legend.position = "none")
+        if (input$WI_cases_plot_county_xaxis == "Date") {
+            p <- 
+                wi_timeseries %>%
+                filter(county %in% counties_to_plot) %>%
+                ggplot(aes(date, cases)) +
+                geom_line(aes(color = county), size = 1.5) +
+                scale_x_date(limits = c(Sys.Date() - 14, NA), expand = c(0.06,0,0.06,2),
+                             date_breaks = "2 days", date_labels = "%b %d") +
+                labs(
+                    title = "County Level Wisconsin Cases of COVID-19 (last 2 weeks)",
+                    y = "Cases",
+                    x = NULL
+                ) +
+                theme_minimal() +
+                theme(legend.position = "none")
+            
+        } else if (input$WI_cases_plot_county_xaxis == "Days Since 10 Cases") {
+            p <- 
+                wi_timeseries %>% 
+                filter(county %in% counties_to_plot) %>% 
+                group_by(county, state) %>% 
+                filter(cases >= 10) %>% 
+                arrange(county, state, date) %>% 
+                mutate(days_since_cases = row_number()) %>% 
+                ungroup() %>% 
+                ggplot(aes(days_since_cases, cases)) +
+                geom_line(aes(color = county), size = 1.5) +
+                scale_x_continuous(breaks = seq(1,101,by = 2), expand = c(0.06,0,0.06,2)) +
+                labs(
+                    title = "County Level Wisconsin Cases of COVID-19 (last 2 weeks)",
+                    y = "Cases",
+                    x = NULL
+                ) +
+                theme_minimal() +
+                theme(legend.position = "none")
+        }
+        
         
         if(input$logscale) {
             p <- p +
                 scale_y_log10() +
-                geom_label_repel(aes(label = county),
+                geom_label_repel(aes(label = str_remove(county, " County")),
                                  data = . %>% filter(date == max(wi_timeseries$date)),
-                                 nudge_x = 2
+                                 nudge_x = 1.5
                 )
         } else {
             p <- p + 
-                geom_label_repel(aes(label = county),
+                geom_label_repel(aes(label = str_remove(county, " County")),
                                  data = . %>% filter(date == max(wi_timeseries$date)),
-                                 nudge_x = 2,
+                                 nudge_x = 1.5,
                                  nudge_y = 5
                 )
         }
