@@ -26,12 +26,11 @@ The data comes from [Corona Data Scraper](https://coronadatascraper.com/#home) w
 
 ```{r}
 # timeseries <- read.csv("data/timeseries-tidy.csv")
-system.time(timeseries <- read.csv("../data/timeseries-tidy.csv"))
+system.time(timeseries <- read_csv("../data/timeseries-tidy.csv", col_types = "ffffdddcDfd"))
 
 wi_timeseries <- 
   timeseries %>% 
   filter(state == "WI") %>% 
-  as_tibble() %>% 
   pivot_wider(names_from = "type", 
               values_from = "value")
 
@@ -53,7 +52,7 @@ wi_timeseries <-
 wi_county <- 
   maps::map("county", plot = FALSE, fill = TRUE) %>% 
   st_as_sf() %>% 
-  subset(grepl("wisconsin", .$ID)) %>% 
+  filter(str_detect(ID, "wisconsin")) %>% 
   mutate(county = str_replace(ID, "wisconsin,", ""))
 ```
 
@@ -98,6 +97,21 @@ p <-
 
 
 ggplotly(p, tooltip = c("text"))
+
+
+plot_data %>% 
+  mutate(cases = ifelse(cases==0, NA, cases)) %>% 
+  plot_ly(split = ~county.y, 
+          color = ~log(cases+1), 
+          colors = "YlOrRd", 
+          span = I(1),
+          stroke = I("gray50"),
+          alpha = 1,
+          text = ~paste("</br>", county.y,"</br>Cases: ", cases),
+          hoverinfo = "text",
+          hoveron = "fills") %>%
+  layout(showlegend = FALSE) %>%
+  colorbar(title = "log(Cases+1)")
 
 ```
 
