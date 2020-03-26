@@ -30,7 +30,8 @@ wi_timeseries <-
             str_remove(" County") %>% 
             str_remove_all("\\.") %>% 
             str_to_lower(),
-        date = as.Date(date)
+        date = as.Date(date),
+        cases_per_cap = cases / population * 100000 
     )
 
 wi_county <- 
@@ -38,6 +39,14 @@ wi_county <-
     st_as_sf() %>% 
     subset(grepl("wisconsin", .$ID)) %>% 
     mutate(county = str_replace(ID, "wisconsin,", ""))
+
+info_to_plot_options = c(
+    "Cases" = "cases",
+    "Cases per 100K people" = "cases_per_cap"
+    # "Deaths" = "deaths",
+    # "Recovered" = "recovered",
+    # "Active" = "active"
+)
 
 #########################################################
 
@@ -57,23 +66,12 @@ ui <- fluidPage(
     
     fluidRow(
         column(width = 2,
-               # h3("Info:"),
-               # p(
-               #     "This dashboard shows the county-level COVID-19 data for Wisconsin.  The data comes from ",
-               #     a("Corona Data Scraper.", href = "https://coronadatascraper.com/#home", target = "_blank"),
-               #     # "The options below offer some additional insight into the data available.  ",
-               #     "Data is current as of ", max(wi_timeseries$date)
-               # ),
-               # hr(),
                h3("Choose the data to visualize:"),
                selectizeInput(
                    "info_to_plot", 
-                   "Select from Cases, Deaths, Recovered:",
-                   c("Cases" = "cases",
-                     "Deaths" = "deaths",
-                     "Recovered" = "recovered",
-                     "Active" = "active"),
-                   selected = "cases"
+                   "Select from Cases or Cases per 100K people:",
+                   info_to_plot_options,
+                   selected = "cases_per_cap"
                ),
                sliderInput("date_to_plot",
                            "Select a date:",
@@ -112,15 +110,6 @@ ui <- fluidPage(
                br()
         )
     )
-    
-    # selectizeInput(
-    #     "category_name",
-    #     "Select one of Amazon's categories to view",
-    #     # "",
-    #     category_choices,
-    #     selected = "Home & Kitchen"
-    # )),
-    
 )
 
 # Define server logic required to draw a histogram
@@ -132,40 +121,47 @@ server <- function(input, output) {
         # info_to_plot <- "cases"
         date_to_plot <- input$date_to_plot
         info_to_plot <- input$info_to_plot
-        highest_value_county <- wi_timeseries %>% 
-            filter(county != "") %>% 
-            pull(info_to_plot) %>% 
-            max()
+        info_to_plot_name <- names(info_to_plot_options[which(info_to_plot_options == info_to_plot)])
         
         plot_data <-
             wi_county %>%
             left_join(filter(wi_timeseries, date == date_to_plot),
-                      by = c("county" = "county2"))
+                      by = c("county" = "county2")) %>% 
+            mutate(
+                value = !!as.name(info_to_plot),
+                value = ifelse(value==0, NA, round(value,1)),
+                info_to_plot = info_to_plot,
+                text = paste0(
+                    "</br>", county.y,
+                    "</br>Cases: ", cases,
+                    if_else(info_to_plot == "cases",
+                            "",
+                            paste0("</br>", info_to_plot_name, ": ", value)))
+            )
         
-        p <-
-            ggplot(data = plot_data,
-                   aes(label = county.y,
-                       text = paste(
-                           "</br>", county.y,
-                           "</br>Cases: ", cases
-                       ))) +
-            geom_sf(aes_(fill = as.name(info_to_plot))) +
-            geom_sf(aes_(fill = as.name(info_to_plot)), size = 1.05,
-                    data = . %>% filter(county.y %in% input$counties_to_plot)) +
-            geom_point(aes(long, lat), size = 5, alpha = 0) +
-            scale_fill_distiller(trans = "log",
-                                 palette = "YlOrRd",
-                                 na.value = "#F2F2F2",
-                                 direction = 1,
-                                 breaks = 10^(0:3),
-                                 limits = c(NA, highest_value_county)
-            ) +
-            theme_void() +
-            labs(title = "Wisconsin COVID-19 Map of Cases")
         
-        ggplotly(p, tooltip = c("text"),
-                 width = 640, height = 640)
-        
+        suppressWarnings({
+            plot_data %>% 
+                plot_ly(split = ~county.y, 
+                        color = ~log(value+1),
+                        colors = "YlOrRd", 
+                        span = I(1),
+                        stroke = I("gray50"),
+                        alpha = 1,
+                        # text = ~paste0("</br>", county.y,"</br>", info_to_plot_name, ": ", value),
+                        text = ~text, 
+                        hoverinfo = "text",
+                        hoveron = "fills",
+                        width = 640,
+                        height = 640) %>%
+                layout(showlegend = FALSE,
+                       colorscale = list(type = "log"),
+                       title = paste0("Wisconsin COVID-19 Map of ", info_to_plot_name)) %>%
+                colorbar(title = info_to_plot_name,
+                         tickvals = log(10^(0:3)+1),
+                         ticktext = 10^(0:3),
+                         len = 0.60)
+        })
     })
     
     
