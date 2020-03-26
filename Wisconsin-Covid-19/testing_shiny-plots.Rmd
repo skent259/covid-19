@@ -15,6 +15,7 @@ library(maps)
 library(plotly)
 library(here)
 library(ggrepel)
+library(geofacet)
 
 ```
 
@@ -48,6 +49,67 @@ wi_county <-
 ```{r}
 wi_timeseries
 ```
+
+
+## Small multiples by county
+
+```{r}
+
+geogrid.hex <- geogrid::calculate_grid(wi, 0.03, 'regular', 13)
+hex <- geogrid::assign_polygons(wi, geogrid.hex)
+sf.hex <- sf::st_as_sf(hex)
+
+us_wi_counties_grid <-
+  as_tibble(sf.hex) %>% 
+  mutate(col = match(V1, sort(unique(V1))),
+         row = match(V2, sort(unique(V2), decreasing = TRUE))) %>% 
+  select(row, col, code = COUNTYFP, name = NAME) %>% 
+  mutate(name_long = paste0(name, " County"))
+
+# grid_preview(us_fl_counties_grid1)
+grid_preview(us_wi_counties_grid, label = "name")
+```
+
+
+
+```{r}
+p <- 
+  ggplot(wi_timeseries,
+         aes(date, cases / population * 100000)) +
+  geom_line(size = 1.5) +
+  scale_x_date(limits = c(Sys.Date() - 14, NA), expand = c(0.06,0,0.06,2),
+               date_breaks = "1 week", date_labels = "%b %d") +
+  # facet_wrap(~ county) +
+  facet_geo(~ county, 
+            grid = us_wi_counties_grid %>% mutate(code = name_long),
+            label = "name"
+            # scales = "free"
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    # axis.title.y=element_blank(),
+    # axis.text.y=element_blank(),
+    # axis.ticks.y=element_blank(),
+    axis.title.x=element_blank(),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank()
+  )
+ 
+  
+```
+
+
+
+It's not perfect, but it'll do for the moment
+
+
+
+
+
+
+
+
 
 
 ## Align x-axis to days since 10 cases

@@ -11,7 +11,6 @@ knitr::opts_chunk$set(
   message = FALSE,
   warning = FALSE
 )
-
 library(tidyverse)
 library(sf)
 library(maps)
@@ -27,13 +26,11 @@ The data comes from [Corona Data Scraper](https://coronadatascraper.com/#home) w
 ```{r}
 # timeseries <- read.csv("data/timeseries-tidy.csv")
 system.time(timeseries <- read_csv("../data/timeseries-tidy.csv", col_types = "ffffdddcDfd"))
-
 wi_timeseries <- 
   timeseries %>% 
   filter(state == "WI") %>% 
   pivot_wider(names_from = "type", 
               values_from = "value")
-
 # adjust county name to match 
 wi_timeseries <- 
   wi_timeseries %>% 
@@ -48,7 +45,6 @@ wi_timeseries <-
 ```{r}
 ## Need to get the county level data
 # counties <- st_as_sf(map("county", plot = FALSE, fill = TRUE))
-
 wi_county <- 
   maps::map("county", plot = FALSE, fill = TRUE) %>% 
   st_as_sf() %>% 
@@ -62,7 +58,6 @@ Choosing to plot the data from 2020-03-21.  Can make this data choice interactiv
 
 ```{r}
 date_to_plot <- "2020-03-21"
-
 plot_data <- 
   wi_county %>% 
   left_join(filter(wi_timeseries, date == date_to_plot),
@@ -90,15 +85,10 @@ p <-
                        breaks = 10^(0:3)
   ) + 
   theme_void()
-
 # p +
 #   geom_point(aes(long, lat), size = 3, color = rgb(0,0,0,0))
 #   theme_minimal()
-
-
 ggplotly(p, tooltip = c("text"))
-
-
 plot_data %>% 
   mutate(cases = ifelse(cases==0, NA, cases)) %>% 
   plot_ly(split = ~county.y, 
@@ -112,7 +102,6 @@ plot_data %>%
           hoveron = "fills") %>%
   layout(showlegend = FALSE) %>%
   colorbar(title = "log(Cases+1)")
-
 ```
 
 
