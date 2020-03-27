@@ -54,7 +54,7 @@ wi_timeseries
 ## Small multiples by county
 
 ```{r}
-
+wi <- tigris::counties("Wisconsin", cb = TRUE)
 geogrid.hex <- geogrid::calculate_grid(wi, 0.03, 'regular', 13)
 hex <- geogrid::assign_polygons(wi, geogrid.hex)
 sf.hex <- sf::st_as_sf(hex)
