@@ -166,6 +166,8 @@ gg <- plot_data_county %>%
 
 ggplotly(gg, tooltip = c("label","label2","label3"))
 
+ggplotly(gg + scale_y_log10(), tooltip = c("label","label2","label3"))
+
 ```
 
 ## Appendix: R Code

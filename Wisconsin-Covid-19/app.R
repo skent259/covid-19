@@ -19,7 +19,7 @@ library(ggrepel)
 # system.time(timeseries <- read.csv("../data/timeseries-tidy.csv"))
 
 wi_timeseries <- 
-    read.csv("data/timeseries-tidy.csv") %>% 
+    read.csv("data/timeseries-tidy_wi_manual.csv") %>% 
     filter(state == "WI") %>% 
     as_tibble() %>% 
     pivot_wider(names_from = "type", 
@@ -115,30 +115,41 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
     
-    output$WI_map <- renderPlotly({
-        
-        # date_to_plot <- "2020-03-21"
-        # info_to_plot <- "cases"
-        date_to_plot <- input$date_to_plot
+    wi_ts <- reactive({
+        ## create variable `value` based on info_to_plot
+        ## create text to layer into plot_ly hover visuals
         info_to_plot <- input$info_to_plot
         info_to_plot_name <- names(info_to_plot_options[which(info_to_plot_options == info_to_plot)])
         
-        plot_data <-
-            wi_county %>%
-            left_join(filter(wi_timeseries, date == date_to_plot),
-                      by = c("county" = "county2")) %>% 
-            mutate(
-                value = !!as.name(info_to_plot),
-                value = ifelse(value==0, NA, round(value,1)),
-                info_to_plot = info_to_plot,
-                text = paste0(
-                    "</br>", county.y,
-                    "</br>Cases: ", cases,
-                    if_else(info_to_plot == "cases",
-                            "",
-                            paste0("</br>", info_to_plot_name, ": ", value)))
-            )
+        wi_ts <- 
+            wi_timeseries %>% 
+            mutate(value = !!as.name(info_to_plot),
+                   value = round(value,1),
+                   info_to_plot = info_to_plot,
+                   text = paste0("</br>", county,
+                                 "</br>Cases: ", cases,
+                                 if_else(info_to_plot == "cases",
+                                         "",
+                                         paste0("</br>", info_to_plot_name, ": ", value))))
+    })
+    
+    info_to_plot_name <- reactive({
+        info_to_plot <- input$info_to_plot
+        info_to_plot_name <- names(info_to_plot_options[which(info_to_plot_options == info_to_plot)])
+    })
+    
+    output$WI_map <- renderPlotly({
         
+        date_to_plot <- input$date_to_plot
+        info_to_plot <- input$info_to_plot
+        info_to_plot_name <- info_to_plot_name()
+        wi_ts <- wi_ts()
+        
+        plot_data <- 
+            wi_county %>% 
+            left_join(filter(wi_ts, date == date_to_plot),
+                      by = c("county" = "county2")) %>% 
+            mutate(value = ifelse(value==0, NA, value))
         
         suppressWarnings({
             plot_data %>% 
@@ -148,7 +159,6 @@ server <- function(input, output) {
                         span = I(1),
                         stroke = I("gray50"),
                         alpha = 1,
-                        # text = ~paste0("</br>", county.y,"</br>", info_to_plot_name, ": ", value),
                         text = ~text, 
                         hoverinfo = "text",
                         hoveron = "fills",
@@ -166,16 +176,18 @@ server <- function(input, output) {
     
     
     output$WI_cases_plot <- renderPlot({
+        wi_ts <- wi_ts()
+        
         p <- 
-            wi_timeseries %>%
+            wi_ts %>%
             filter(county == "") %>%
-            ggplot(aes(date, cases)) +
+            ggplot(aes(date, value)) +
             geom_line(size = 1.5) +
             scale_x_date(limits = c(Sys.Date() - 14, NA), expand = c(0.06,0,0.06,2),
                          date_breaks = "2 days", date_labels = "%b %d") +
             labs(
                 title = "Wisconsin Cases of COVID-19 (last 2 weeks)",
-                y = "Cases",
+                y = info_to_plot_name(),
                 x = NULL
             ) +
             theme_minimal()
@@ -195,15 +207,22 @@ server <- function(input, output) {
         
         if (input$WI_cases_plot_county_xaxis == "Date") {
             p <- 
-                wi_timeseries %>%
-                filter(county %in% counties_to_plot) %>%
-                ggplot(aes(date, cases)) +
-                geom_line(aes(color = county), size = 1.5) +
-                scale_x_date(limits = c(Sys.Date() - 14, NA), expand = c(0.06,0,0.06,2),
+                wi_ts() %>%
+                filter(county != "") %>% 
+                # filter(county %in% counties_to_plot) %>%
+                ggplot(aes(date, value, text = text)) +
+                geom_line(aes(date, value, group = county),
+                          color = "grey75",
+                          alpha = 0.5) +
+                geom_line(aes(date, value, color = county, group = county),
+                          size = 1.5,
+                          data = . %>% filter(county %in% counties_to_plot)) +
+                scale_x_date(limits = c(Sys.Date() - 14, NA),
+                             expand = c(0.06,0,0.06,2),
                              date_breaks = "2 days", date_labels = "%b %d") +
                 labs(
                     title = "County Level Wisconsin Cases of COVID-19 (last 2 weeks)",
-                    y = "Cases",
+                    y = info_to_plot_name(),
                     x = NULL
                 ) +
                 theme_minimal() +
@@ -211,19 +230,26 @@ server <- function(input, output) {
             
         } else if (input$WI_cases_plot_county_xaxis == "Days Since 10 Cases") {
             p <- 
-                wi_timeseries %>% 
-                filter(county %in% counties_to_plot) %>% 
+                wi_ts() %>% 
+                filter(county != "") %>% 
+                # filter(county %in% counties_to_plot) %>% 
                 group_by(county, state) %>% 
                 filter(cases >= 10) %>% 
                 arrange(county, state, date) %>% 
                 mutate(days_since_cases = row_number()) %>% 
                 ungroup() %>% 
-                ggplot(aes(days_since_cases, cases)) +
-                geom_line(aes(color = county), size = 1.5) +
+                ggplot(aes(days_since_cases, value)) +
+                geom_line(aes(group = county),
+                          color = "grey75",
+                          alpha = 0.5) +
+                geom_line(aes(color = county, group = county),
+                          size = 1.5,
+                          data = . %>% filter(county %in% counties_to_plot)) +
+                # geom_line(aes(color = county), size = 1.5) +
                 scale_x_continuous(breaks = seq(1,101,by = 2), expand = c(0.06,0,0.06,2)) +
                 labs(
                     title = "County Level Wisconsin Cases of COVID-19 (last 2 weeks)",
-                    y = "Cases",
+                    y = info_to_plot_name(),
                     x = NULL
                 ) +
                 theme_minimal() +
@@ -233,27 +259,31 @@ server <- function(input, output) {
         
         if(input$logscale) {
             p <- p +
-                scale_y_log10() +
-                geom_label_repel(aes(label = str_remove(county, " County")),
-                                 data = . %>% filter(date == max(wi_timeseries$date)),
-                                 nudge_x = 1.5
-                )
+            scale_y_log10() +
+            geom_label_repel(aes(label = str_remove(county, " County")),
+                             data = . %>%
+                                 filter(!is.na(value), county %in% counties_to_plot) %>%
+                                 group_by(county) %>%
+                                 filter(date == max(date)),
+                                 nudge_x = 1.5)
+
+            # ggplotly(p, tooltip = "text") %>% 
+            #     layout(yaxis = list(type = "log"))
         } else {
-            p <- p + 
-                geom_label_repel(aes(label = str_remove(county, " County")),
-                                 data = . %>% filter(date == max(wi_timeseries$date)),
-                                 nudge_x = 1.5,
-                                 nudge_y = 5
-                )
+            # ggplotly(p, tooltip = "text")
+            p <- p +
+            geom_label_repel(aes(label = str_remove(county, " County")),
+                             data = . %>%
+                                 filter(!is.na(value), county %in% counties_to_plot) %>%
+                                 group_by(county) %>%
+                                 filter(date == max(date)),nudge_x = 1.5,
+                             nudge_y = 5)
         }
         
         p
-        
+        # ggplotly(p, tooltip = "text")
     })
-    
-    output$info <- renderPrint({
-        event_data("plotly_click")
-    })
+
     
 }
 
