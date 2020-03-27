@@ -104,6 +104,69 @@ plot_data %>%
   colorbar(title = "log(Cases+1)")
 ```
 
+Add options for counties of interest. Adjust colors accordingly.
+
+Add options for scale_x_date(limits=c(min,max))?
+
+Add option for logscale. scale_y_continuous(trans = "log10") and scale_y_log10() does not appear to work with ggplotly. Maybe if statement with two different ggplot statements.
+
+```{r}
+plot_data <- 
+  wi_county %>% 
+  left_join(wi_timeseries,
+            by = c("county" = "county2"))
+
+plot_data_wisconsin <- plot_data %>% 
+  as_data_frame() %>% 
+  group_by(date) %>% 
+  summarize(cases = sum(cases, na.rm = TRUE)) %>% 
+  mutate(Name = "Wisconsin") %>% 
+  rename(Date = date,
+         Cases = cases)
+
+plot_data_county <- plot_data %>% 
+  as_data_frame() %>% 
+  drop_na(county.y) %>% 
+  mutate(county.y = fct_drop(county.y)) %>% 
+  rename(Name = county.y,
+         Date = date,
+         Cases = cases)
+
+gg <- plot_data_county %>% 
+  ggplot() + 
+  geom_line(aes(x = Date, y = Cases, 
+                group = Name,
+                label = Name,
+                label2 = Date,
+                label3 = Cases), 
+            color = "gray75") + 
+  geom_line(data = plot_data_county %>% 
+              filter(Name == "Dane County"), 
+            aes(x = Date, y = Cases,
+                label = Name,
+                label2 = Date,
+                label3 = Cases), 
+            color = "#00BFC4",
+            size = 1) + 
+  geom_line(data = plot_data_wisconsin,
+            aes(x = Date, y = Cases,
+                label = Name,
+                label2 = Date,
+                label3 = Cases), 
+            color = "#F8766D",
+            size = 1) + 
+  # scale_y_continuous(trans = "log10") + 
+  # scale_y_log10() +
+  # scale_x_date(limits = plot_data_wisconsin %>%
+  #                summarize(min(Date),
+  #                          max(Date) + 2) %>%
+  #                unlist() %>%
+  #                lubridate::as_date()) +
+  theme_bw()
+
+ggplotly(gg, tooltip = c("label","label2","label3"))
+
+```
 
 ## Appendix: R Code
 
