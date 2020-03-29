@@ -118,6 +118,7 @@ plot_data <-
 
 plot_data_wisconsin <- plot_data %>% 
   as_data_frame() %>% 
+  filter(date != as_date("2020-03-12")) %>% 
   group_by(date) %>% 
   summarize(cases = sum(cases, na.rm = TRUE)) %>% 
   mutate(Name = "Wisconsin") %>% 
@@ -126,6 +127,7 @@ plot_data_wisconsin <- plot_data %>%
 
 plot_data_county <- plot_data %>% 
   as_data_frame() %>% 
+  filter(date != as_date("2020-03-12")) %>% 
   drop_na(county.y) %>% 
   mutate(county.y = fct_drop(county.y)) %>% 
   rename(Name = county.y,
@@ -157,16 +159,18 @@ gg <- plot_data_county %>%
             size = 1) + 
   # scale_y_continuous(trans = "log10") + 
   # scale_y_log10() +
-  # scale_x_date(limits = plot_data_wisconsin %>%
-  #                summarize(min(Date),
-  #                          max(Date) + 2) %>%
-  #                unlist() %>%
-  #                lubridate::as_date()) +
+  scale_x_date(limits = plot_data_wisconsin %>%
+                 summarize(max(Date) - 13,
+                           max(Date)) %>%
+                 unlist() %>%
+                 lubridate::as_date()) +
   theme_bw()
 
-ggplotly(gg, tooltip = c("label","label2","label3"))
+ggplotly(gg, tooltip = c("label","label2","label3")) >% 
+  layout(yaxis = list(type = "log", 
+                      range = c(0,3)))
 
-ggplotly(gg + scale_y_log10(), tooltip = c("label","label2","label3"))
+# ggplotly(gg + scale_y_log10(), tooltip = c("label","label2","label3"))
 
 ```
 
