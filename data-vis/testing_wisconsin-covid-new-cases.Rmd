@@ -1,0 +1,267 @@
+---
+title: "Visualizing Wisconsin COVID-19 Cases"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE
+)
+
+library(tidyverse)
+library(sf)
+library(maps)
+library(plotly)
+library(here)
+library(purrr)
+library(lubridate)
+library(zoo)
+
+```
+
+## New cases versus cumulative cases, averaged over the previous week
+
+```{r}
+timeseries <- read_csv("https://coronadatascraper.com/timeseries-tidy.csv", col_types = "ffffdddcffDfd")
+
+plot_data <- timeseries %>% 
+  filter(state == "WI"| state %in% c("Hebei","Lombardia")) %>% 
+  mutate(state = as.character(state),
+         county = as.character(county),
+         county = ifelse(is.na(county), state, county)) %>% 
+  pivot_wider(names_from = "type", 
+              values_from = "value") %>% 
+  arrange(county, date) %>% 
+  group_by(county, date) %>% 
+  summarize(cases = sum(cases, na.rm = TRUE),
+            recovered = sum(recovered, na.rm = TRUE),
+            active = sum(active, na.rm = TRUE),
+            deaths = sum(deaths, na.rm = TRUE)) %>% 
+  nest() %>% 
+  mutate(data = purrr::map(data, function(df) mutate(df, new.cases = cases - lag(cases, default = cases[1]))),
+         data = purrr::map(data, function(df) mutate(df, roll.cases = rollapply(new.cases, list(-(0:6)), sum, fill = NA, align = "right", partial = FALSE)))) %>% 
+  unnest() %>% 
+  ungroup() %>% 
+  rename(Name = county,
+         Date = date,
+         Cases = cases,
+         `New Cases (Last 7 Days)` = roll.cases)
+
+gg <- plot_data %>% 
+  ggplot() + 
+  geom_point(aes(x = Cases, y = `New Cases (Last 7 Days)`,
+                 group = Name,
+                 label = Name,
+                 label2 = Date,
+                 label3 = Cases,
+                 label4 = `New Cases (Last 7 Days)`), 
+             color = "gray75", 
+             alpha = 0.25, 
+             size = 1) + 
+  geom_line(aes(x = Cases, y = `New Cases (Last 7 Days)`,
+                group = Name,
+                label = Name,
+                label2 = Date,
+                label3 = Cases,
+                label4 = `New Cases (Last 7 Days)`), 
+            color = "gray75", 
+            alpha = 0.25, 
+            show.legend = FALSE) + 
+  geom_point(data = plot_data %>% 
+               filter(Name %in% c("Dane County", "WI", "Hebei", "Lombardia")), 
+             aes(x = Cases, y = `New Cases (Last 7 Days)`, 
+                 color = Name,
+                 label = Name,
+                 label2 = Date,
+                 label3 = Cases,
+                 label4 = `New Cases (Last 7 Days)`), 
+             alpha = 0.75) + 
+  geom_line(data = plot_data %>% 
+               filter(Name %in% c("Dane County", "WI", "Hebei", "Lombardia")), 
+            aes(x = Cases, y = `New Cases (Last 7 Days)`, 
+                color = Name,
+                label = Name,
+                label2 = Date,
+                label3 = Cases,
+                label4 = `New Cases (Last 7 Days)`), 
+            alpha = 0.75, 
+            size = 1, 
+            show.legend = FALSE) + 
+  scale_x_log10() +
+  scale_y_log10() +
+  theme_bw()
+
+ggplotly(gg, tooltip = c("label","label1","label2","label3","label4")) %>% 
+  layout(showlegend = FALSE)
+
+```
+
+## Average daily change of cumulative cases versus time, averaged over the previous week
+
+```{r}
+timeseries <- read_csv("https://coronadatascraper.com/timeseries-tidy.csv", col_types = "ffffdddcffDfd")
+
+plot_data <- timeseries %>% 
+  filter(state == "WI"| state %in% c("Hebei","Lombardia")) %>% 
+  mutate(state = as.character(state),
+         county = as.character(county),
+         county = ifelse(is.na(county), state, county)) %>% 
+  pivot_wider(names_from = "type", 
+              values_from = "value") %>% 
+  arrange(county, date) %>% 
+  group_by(county, date) %>% 
+  summarize(cases = sum(cases, na.rm = TRUE),
+            recovered = sum(recovered, na.rm = TRUE),
+            active = sum(active, na.rm = TRUE),
+            deaths = sum(deaths, na.rm = TRUE)) %>% 
+  nest() %>% 
+  mutate(data = purrr::map(data, function(df) mutate(df, new.cases = cases - lag(cases, default = cases[1]))),
+         data = purrr::map(data, function(df) mutate(df, roll.cases = rollapply(new.cases, list(-(0:6)), sum, fill = NA, align = "right", partial = FALSE)))) %>% 
+  unnest() %>% 
+  ungroup() %>% 
+  mutate(`Average Daily Change (Last 7 Days)` = round(roll.cases/cases/7*100,2)) %>% 
+  mutate(`Average Daily Change (Last 7 Days)` = ifelse(is.nan(`Average Daily Change (Last 7 Days)`), 0, `Average Daily Change (Last 7 Days)`)) %>% 
+  rename(Name = county,
+         Date = date,
+         Cases = cases,
+         `New Cases (Last 7 Days)` = roll.cases) %>% 
+  filter(`New Cases (Last 7 Days)` >= 0)
+
+gg <- plot_data %>% 
+  ggplot() + 
+  geom_point(aes(x = Date, y = `Average Daily Change (Last 7 Days)`,
+                 group = Name,
+                 label = Name,
+                 label2 = Date,
+                 label3 = Cases,
+                 label4 = `Average Daily Change (Last 7 Days)`), 
+             color = "gray75", 
+             alpha = 0.25, 
+             size = 1) + 
+  geom_line(aes(x = Date, y = `Average Daily Change (Last 7 Days)`,
+                group = Name,
+                label = Name,
+                label2 = Date,
+                label3 = Cases,
+                label4 = `Average Daily Change (Last 7 Days)`), 
+            color = "gray75", 
+            alpha = 0.25, 
+            show.legend = FALSE) + 
+  geom_point(data = plot_data %>% 
+               filter(Name %in% c("Dane County", "WI", "Hebei", "Lombardia")), 
+             aes(x = Date, y = `Average Daily Change (Last 7 Days)`, 
+                 color = Name,
+                 label = Name,
+                 label2 = Date,
+                 label3 = Cases,
+                 label4 = `Average Daily Change (Last 7 Days)`), 
+             alpha = 0.75) + 
+  geom_line(data = plot_data %>% 
+               filter(Name %in% c("Dane County", "WI", "Hebei", "Lombardia")), 
+            aes(x = Date, y = `Average Daily Change (Last 7 Days)`, 
+                color = Name,
+                label = Name,
+                label2 = Date,
+                label3 = Cases,
+                label4 = `Average Daily Change (Last 7 Days)`), 
+            alpha = 0.75, 
+            size = 1, 
+            show.legend = FALSE) + 
+  scale_x_date(limits = plot_data %>%
+                 summarize(max(Date) - 15,
+                           max(Date) - 2) %>% 
+                 unlist() %>%
+                 lubridate::as_date()) +
+  # scale_y_log10() +
+  theme_bw()
+
+ggplotly(gg, tooltip = c("label","label1","label2","label3","label4")) %>% 
+  layout(showlegend = FALSE)
+
+```
+
+## Average daily change of cumulative cases versus cumulative cases, averaged over the previous week
+
+```{r}
+timeseries <- read_csv("https://coronadatascraper.com/timeseries-tidy.csv", col_types = "ffffdddcffDfd")
+
+plot_data <- timeseries %>% 
+  filter(state == "WI"| state %in% c("Hebei","Lombardia")) %>% 
+  mutate(state = as.character(state),
+         county = as.character(county),
+         county = ifelse(is.na(county), state, county)) %>% 
+  pivot_wider(names_from = "type", 
+              values_from = "value") %>% 
+  arrange(county, date) %>% 
+  group_by(county, date) %>% 
+  summarize(cases = sum(cases, na.rm = TRUE),
+            recovered = sum(recovered, na.rm = TRUE),
+            active = sum(active, na.rm = TRUE),
+            deaths = sum(deaths, na.rm = TRUE)) %>% 
+  nest() %>% 
+  mutate(data = purrr::map(data, function(df) mutate(df, new.cases = cases - lag(cases, default = cases[1]))),
+         data = purrr::map(data, function(df) mutate(df, roll.cases = rollapply(new.cases, list(-(0:6)), sum, fill = NA, align = "right", partial = FALSE)))) %>% 
+  unnest() %>% 
+  ungroup() %>% 
+  mutate(`Average Daily Change (Last 7 Days)` = round(roll.cases/cases/7*100,2)) %>% 
+  mutate(`Average Daily Change (Last 7 Days)` = ifelse(is.nan(`Average Daily Change (Last 7 Days)`), 0, `Average Daily Change (Last 7 Days)`)) %>% 
+  rename(Name = county,
+         Date = date,
+         Cases = cases,
+         `New Cases (Last 7 Days)` = roll.cases) %>% 
+  filter(`New Cases (Last 7 Days)` >= 0)
+
+gg <- plot_data %>% 
+  ggplot() + 
+  geom_point(aes(x = Cases, y = `Average Daily Change (Last 7 Days)`,
+                 group = Name,
+                 label = Name,
+                 label2 = Date,
+                 label3 = Cases,
+                 label4 = `Average Daily Change (Last 7 Days)`), 
+             color = "gray75", 
+             alpha = 0.25, 
+             size = 1) + 
+  geom_line(aes(x = Cases, y = `Average Daily Change (Last 7 Days)`,
+                group = Name,
+                label = Name,
+                label2 = Date,
+                label3 = Cases,
+                label4 = `Average Daily Change (Last 7 Days)`), 
+            color = "gray75", 
+            alpha = 0.25, 
+            show.legend = FALSE) + 
+  geom_point(data = plot_data %>% 
+               filter(Name %in% c("Dane County", "WI", "Hebei", "Lombardia")), 
+             aes(x = Cases, y = `Average Daily Change (Last 7 Days)`, 
+                 color = Name,
+                 label = Name,
+                 label2 = Date,
+                 label3 = Cases,
+                 label4 = `Average Daily Change (Last 7 Days)`), 
+             alpha = 0.75) + 
+  geom_line(data = plot_data %>% 
+               filter(Name %in% c("Dane County", "WI", "Hebei", "Lombardia")), 
+            aes(x = Cases, y = `Average Daily Change (Last 7 Days)`, 
+                color = Name,
+                label = Name,
+                label2 = Date,
+                label3 = Cases,
+                label4 = `Average Daily Change (Last 7 Days)`), 
+            alpha = 0.75, 
+            size = 1, 
+            show.legend = FALSE) + 
+  scale_x_log10() +
+  theme_bw()
+
+ggplotly(gg, tooltip = c("label","label1","label2","label3","label4")) %>% 
+  layout(showlegend = FALSE)
+
+```
+
+## Appendix: R Code
+
+```{r appendix, ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE}
+```
