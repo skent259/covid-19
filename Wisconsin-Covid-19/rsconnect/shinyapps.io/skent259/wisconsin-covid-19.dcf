@@ -5,6 +5,6 @@ account: skent259
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 1983842
-bundleId: 2933012
+bundleId: 2954212
 url: https://skent259.shinyapps.io/wisconsin-covid-19/
-when: 1585330706.80612
+when: 1585752054.22173

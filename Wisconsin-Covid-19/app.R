@@ -19,7 +19,8 @@ library(ggrepel)
 # system.time(timeseries <- read.csv("../data/timeseries-tidy.csv"))
 
 wi_timeseries <- 
-    read.csv("data/timeseries-tidy_wi_manual.csv") %>% 
+    # read.csv("data/timeseries-tidy_wi_manual.csv") %>% 
+    read.csv("data/timeseries-tidy_wi.csv") %>% 
     filter(state == "WI") %>% 
     as_tibble() %>% 
     pivot_wider(names_from = "type", 
@@ -67,9 +68,9 @@ ui <- fluidPage(
     fluidRow(
         column(width = 2,
                h3("Choose the data to visualize:"),
-               selectizeInput(
+               radioButtons(
                    "info_to_plot", 
-                   "Select from Cases or Cases per 100K people:",
+                   "Select a variable:",
                    info_to_plot_options,
                    selected = "cases_per_cap"
                ),
